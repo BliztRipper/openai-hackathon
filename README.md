@@ -45,6 +45,7 @@ FastAPI routes:
 - `POST /api/companion` accepts the frontend companion contract.
 - `GET /api/workspace` and `POST /api/workspace` expose the care workspace.
 - `GET /docs` opens the FastAPI API reference.
+- `POST /v1/realtime/session` creates a short-lived OpenAI Realtime client secret for browser voice sessions.
 
 Optional environment variables:
 
@@ -53,13 +54,14 @@ SECOND_BRAIN_API_BASE_URL=http://localhost:8787
 SECOND_BRAIN_API_TOKEN=<server-side-bearer-token>
 BACKEND_BEARER_TOKEN=<same-service-bearer-token>
 SECOND_BRAIN_MODEL=gpt-5.5-pro
-OPENAI_API_KEY=<optional-server-side-key>
+OPENAI_API_KEY=<server-side-key-for-realtime-voice>
 COMPANION_API_TOKEN=<optional-local-session-token>
+OPENAI_REALTIME_MODEL=gpt-realtime
 CORS_ALLOW_ORIGIN=https://your-domain.example
 WORKSPACE_JSON_PATH=/path/to/workspace.json
 ```
 
-The browser never receives a standard API key. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
+The browser never receives a standard API key. For voice, call `/api/realtime-session` from the product server or `/v1/realtime/session` from a trusted backend with the service bearer token; the response returns only a short-lived Realtime client secret. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
 
 ## Care workspace
 

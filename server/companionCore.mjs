@@ -339,6 +339,8 @@ export async function checkSecondBrainExpressStatus(options = {}) {
       service: typeof json?.service === 'string' ? json.service : 'second-brain-express',
       authMode: typeof json?.authMode === 'string' ? json.authMode : 'bearer',
       hasOpenAiKey: Boolean(json?.hasOpenAiKey),
+      realtimeReady: Boolean(json?.realtimeReady),
+      realtimePath: typeof json?.realtimePath === 'string' ? json.realtimePath : undefined,
       baseUrl,
       model,
       reason: token

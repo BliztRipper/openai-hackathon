@@ -83,6 +83,39 @@ class FastApiContractTest(unittest.TestCase):
         )
         self.assertEqual(authorized.status_code, 200)
 
+    def test_realtime_session_returns_normalized_client_secret(self):
+        import fastapi_service.main as main
+
+        async def fake_secret(payload):
+            return {
+                "expires_at": 1778285000,
+                "session": {
+                    "id": "sess_test",
+                    "client_secret": {"value": "ek_test", "expires_at": 1778285000},
+                    "model": "gpt-realtime",
+                },
+            }
+
+        original = main.request_openai_realtime_client_secret
+        main.request_openai_realtime_client_secret = fake_secret
+        try:
+            response = self.client.post("/v1/realtime/session", json={"personaId": "malee", "voice": "alloy"})
+        finally:
+            main.request_openai_realtime_client_secret = original
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["mode"], "openai-realtime")
+        self.assertEqual(data["clientSecret"]["value"], "ek_test")
+        self.assertEqual(data["session"]["session"]["id"], "sess_test")
+
+    def test_realtime_session_reports_missing_openai_key(self):
+        os.environ.pop("OPENAI_API_KEY", None)
+        response = self.client.post("/v1/realtime/session", json={"personaId": "malee"})
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("OpenAI", response.json()["detail"])
+
     def test_workspace_summary_is_available(self):
         response = self.client.get("/api/workspace")
         self.assertEqual(response.status_code, 200)

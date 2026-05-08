@@ -7,11 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
+import httpx
+
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 DEFAULT_MODEL = "gpt-5.5-pro"
+DEFAULT_REALTIME_MODEL = "gpt-realtime"
+OPENAI_REALTIME_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_WORKSPACE_PATH = ROOT_DIR / "server" / "workspace-data" / "workspace.json"
 MAX_REQUESTS_PER_MINUTE = 30
@@ -75,6 +79,12 @@ class ExpressCompanionRequest(BaseModel):
     context: str = Field(default="concerning_trend", max_length=120)
     model: str = Field(default=DEFAULT_MODEL, max_length=120)
     supportContext: SupportContext
+
+
+class RealtimeSessionRequest(BaseModel):
+    personaId: str = Field(default="malee", max_length=20)
+    voice: str = Field(default="alloy", max_length=40)
+    instructions: Optional[str] = Field(default=None, max_length=1200)
 
 
 class WorkspaceEvent(BaseModel):
@@ -308,6 +318,57 @@ def client_ip(request: Request) -> str:
     return forwarded or (request.client.host if request.client else "unknown")
 
 
+def realtime_instructions(payload: RealtimeSessionRequest) -> str:
+    persona = payload.personaId if payload.personaId in ALLOWED_PERSONA_IDS else "care profile"
+    base = (
+        "You are Second Brain voice support for cognitive wellness. Use warm, concise, non-diagnostic language. "
+        "Ask for one useful recall or reasoning attempt before giving a direct answer unless the user expresses urgent risk. "
+        f"Current persona id: {persona}."
+    )
+    return f"{base} {payload.instructions.strip()}" if payload.instructions else base
+
+
+async def request_openai_realtime_client_secret(payload: RealtimeSessionRequest) -> dict[str, Any]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OpenAI API key is not configured for Realtime voice sessions")
+
+    model = os.getenv("OPENAI_REALTIME_MODEL") or DEFAULT_REALTIME_MODEL
+    body = {
+        "session": {
+            "type": "realtime",
+            "model": model,
+            "instructions": realtime_instructions(payload),
+            "audio": {"output": {"voice": payload.voice}},
+        }
+    }
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.post(
+            OPENAI_REALTIME_CLIENT_SECRETS_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=body,
+        )
+    if response.status_code >= 400:
+        detail = response.text[:240] or "OpenAI Realtime session request failed"
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    return response.json()
+
+
+def normalize_realtime_secret(openai_json: dict[str, Any]) -> dict[str, Any]:
+    session = openai_json.get("session") if isinstance(openai_json.get("session"), dict) else {}
+    secret = openai_json.get("client_secret") if isinstance(openai_json.get("client_secret"), dict) else None
+    if secret is None:
+        secret = session.get("client_secret") if isinstance(session.get("client_secret"), dict) else None
+    value = openai_json.get("value") or (secret or {}).get("value")
+    expires_at = openai_json.get("expires_at") or (secret or {}).get("expires_at") or session.get("expires_at")
+    return {
+        "ok": True,
+        "mode": "openai-realtime",
+        "clientSecret": {"value": value, "expiresAt": expires_at},
+        "session": openai_json,
+    }
+
+
 def check_rate_limit(request: Request) -> None:
     key = client_ip(request)
     now = time.time()
@@ -350,6 +411,8 @@ def health() -> dict[str, Any]:
         "hasOpenAiKey": bool(os.getenv("OPENAI_API_KEY")),
         "model": os.getenv("SECOND_BRAIN_MODEL") or os.getenv("OPENAI_MODEL") or DEFAULT_MODEL,
         "companionPath": "/v1/companion",
+        "realtimePath": "/v1/realtime/session",
+        "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
     }
 
 
@@ -367,7 +430,15 @@ def provider_status() -> dict[str, Any]:
         "baseUrl": os.getenv("SECOND_BRAIN_API_BASE_URL", "http://localhost:8787"),
         "model": model,
         "reason": "",
+        "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
     }
+
+
+@app.post("/v1/realtime/session", dependencies=[Depends(require_bearer)])
+async def realtime_session(payload: RealtimeSessionRequest, request: Request) -> dict[str, Any]:
+    check_rate_limit(request)
+    openai_json = await request_openai_realtime_client_secret(payload)
+    return normalize_realtime_secret(openai_json)
 
 
 @app.post("/v1/companion", dependencies=[Depends(require_bearer)])

@@ -24,6 +24,7 @@ import {
   checkRateLimit,
   createCompanionResponse,
   methodNotAllowed,
+  normalizeSecondBrainExpressBaseUrl,
   readJsonBody,
   sendJson,
 } from './companionCore.mjs';
@@ -49,6 +50,32 @@ const server = createServer(async (req, res) => {
       return;
     }
     sendJson(res, 200, await checkSecondBrainExpressStatus());
+    return;
+  }
+
+  if (path === '/api/realtime-session') {
+    if (req.method !== 'POST') {
+      methodNotAllowed(res);
+      return;
+    }
+    try {
+      const baseUrl = normalizeSecondBrainExpressBaseUrl(process.env.SECOND_BRAIN_API_BASE_URL);
+      const token = process.env.SECOND_BRAIN_API_TOKEN || process.env.BACKEND_BEARER_TOKEN;
+      if (!baseUrl || !token) {
+        sendJson(res, 503, { ok: false, error: 'Realtime voice session service is not configured.' });
+        return;
+      }
+      const body = await readJsonBody(req);
+      const response = await fetch(`${baseUrl}/v1/realtime/session`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      const json = await response.json();
+      sendJson(res, response.status, json);
+    } catch {
+      sendJson(res, 500, { ok: false, error: 'Unable to create realtime voice session.' });
+    }
     return;
   }
 

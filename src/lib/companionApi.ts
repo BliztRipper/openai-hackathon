@@ -40,6 +40,8 @@ export type ProviderStatus = {
   service?: string;
   authMode?: string;
   hasOpenAiKey?: boolean;
+  realtimeReady?: boolean;
+  realtimePath?: string;
   baseUrl: string;
   model: string;
   reason?: string;
