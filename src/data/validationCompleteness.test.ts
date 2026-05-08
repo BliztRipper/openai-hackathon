@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { domainTrends, validationReadiness } from './demoSignals';
+import { domainTrends, validationReadiness } from './careSignals';
 import { memoryStores } from './memoryStores';
 
-describe('fixture completeness', () => {
+describe('care signal completeness', () => {
   it('contains baseline and trend-change points for all trends', () => {
     for (const trends of Object.values(domainTrends)) {
       for (const trend of trends) {
@@ -20,7 +20,7 @@ describe('fixture completeness', () => {
     }
   });
 
-  it('maps synthetic signals to future validation data needs', () => {
+  it('maps product signals to future validation data needs', () => {
     expect(validationReadiness.length).toBeGreaterThanOrEqual(4);
     expect(validationReadiness.some((item) => item.signal.includes('Recall'))).toBe(true);
     expect(validationReadiness.some((item) => item.signal.includes('AGI-assisted'))).toBe(true);

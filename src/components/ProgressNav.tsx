@@ -1,15 +1,15 @@
-import { demoStages, stageLabels, type DemoStage } from '../lib/demoState';
+import { productStages, stageLabels, type ProductStage } from '../lib/productFlowState';
 
 type Props = {
-  current: DemoStage;
-  onSelect: (stage: DemoStage) => void;
+  current: ProductStage;
+  onSelect: (stage: ProductStage) => void;
 };
 
 export function ProgressNav({ current, onSelect }: Props) {
-  const currentIndex = demoStages.indexOf(current);
+  const currentIndex = productStages.indexOf(current);
   return (
-    <nav className="progress-nav" aria-label="Demo progress">
-      {demoStages.map((stage, index) => (
+    <nav className="progress-nav" aria-label="Care flow progress">
+      {productStages.map((stage, index) => (
         <button
           key={stage}
           className={`progress-step ${stage === current ? 'active' : ''} ${index < currentIndex ? 'done' : ''}`}

@@ -14,6 +14,6 @@ describe('DeterministicInteractionAdapter', () => {
   it('documents the future OpenAI boundary without exposing browser API keys', () => {
     expect(OPENAI_REALTIME_ADAPTER_NOTE).toContain('server');
     expect(OPENAI_REALTIME_ADAPTER_NOTE).toContain('OPENAI_API_KEY');
-    expect(OPENAI_REALTIME_ADAPTER_NOTE).toContain('never exposes');
+    expect(OPENAI_REALTIME_ADAPTER_NOTE).toContain('never receives');
   });
 });

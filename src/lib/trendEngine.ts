@@ -1,4 +1,4 @@
-import { domainTrends, notices, type DomainTrend, type Notice } from '../data/demoSignals';
+import { domainTrends, notices, type DomainTrend, type Notice } from '../data/careSignals';
 import type { PersonaId } from '../data/personas';
 
 export type DashboardSummary = {

@@ -1,48 +1,59 @@
-# Second Brain Demo
+# Second Brain
 
-OpenAI Codex x AIAT Hackathon Thailand demo app.
+Second Brain is a post-AGI cognitive wellness co-pilot for healthy aging. It helps older adults preserve cognitive agency while still benefiting from AI assistance: the product asks for useful recall or reasoning effort before completing cognitive work, anchors reality from consented context, and turns longitudinal support patterns into caregiver/clinician review summaries.
 
-Second Brain is a responsive, stakeholder-facing demo for cognitive wellness support in a post-AGI era. It shows how AGI can mask functional change and how a dignity-first support layer can turn interaction patterns into human-reviewed support signals.
+## Product scope
 
-## Demo scope
-
-- Static React + Vite + TypeScript app.
-- Synthetic data only; no real patient data.
-- Deterministic no-drop-off golden path for Malee's medication routine.
-- Somchai and Araya dashboard variants for social-cue, finance, communication, and capability-inflation signals.
-- Non-diagnostic language: outputs are support trends and review prompts, not medical conclusions.
-
-## Simulated voice disclosure
-
-This MVP uses simulated voice-like transcript controls. No live voice, microphone streaming, or OpenAI API key is required for the core demo.
-
-If a future live OpenAI voice enhancement is added, it must use a backend or serverless token endpoint that keeps `OPENAI_API_KEY` server-side and mints ephemeral Realtime client secrets. Do not expose a standard API key in browser code.
+- React + Vite + TypeScript frontend.
+- Server-side companion insight endpoint with protected continuity behavior when provider access is unavailable.
+- JSON care workspace for local product state during development.
+- Elderly-first UI: large readable text, voice-first interaction framing, visible consent boundaries, and non-diagnostic support language.
+- Care dashboard: cognitive-domain trends, necessary notices, capability-inflation signals, companion-boundary signals, and validation-readiness mapping.
 
 ## Run locally
 
 ```bash
 npm install
-npm run dev
+npm run dev:full
 ```
 
-## Verify
+Open `http://localhost:5173`.
+
+Useful commands:
 
 ```bash
 npm run test
 npm run build
+npm run smoke
 ```
 
-## Deploy
+## Server configuration
 
-The core demo builds as static assets in `dist/` and can be deployed to Vercel or GitHub Pages. No environment variables are needed for the static demo.
+The companion insight service is implemented at `/api/companion`. It proxies the Second Brain Express API from `http://206.189.235.67:8787/docs` when `SECOND_BRAIN_API_TOKEN` is configured. `/api/provider-status` checks remote health and whether the server is ready to call authenticated companion routes. Provider credentials stay server-side.
 
-## Architecture concept
+Optional environment variables:
 
-The UI presents cognitively-inspired multi-store memory as the diagnostic instrument:
+```bash
+SECOND_BRAIN_API_BASE_URL=http://206.189.235.67:8787
+SECOND_BRAIN_API_TOKEN=<server-side-bearer-token>
+SECOND_BRAIN_MODEL=gpt-5.5-pro
+OPENAI_API_KEY=<optional-server-side-key>
+COMPANION_API_TOKEN=<optional-local-session-token>
+CORS_ALLOW_ORIGIN=https://your-domain.example
+WORKSPACE_JSON_PATH=/path/to/workspace.json
+```
 
-- Episodic store: append-only event log.
-- Semantic store: life knowledge graph.
-- Procedural store: routine signature model.
-- Working memory: current conversation context.
+The browser never receives a standard API key. If the remote service is unavailable or the bearer token is not configured, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
 
-These stores are simulated for the hackathon MVP, but their data shapes are explicit so the dashboard claims are traceable.
+## Care workspace
+
+`/api/workspace` exposes the local care workspace:
+
+- `GET /api/workspace` returns workspace summary, active sessions, recent events, review queue, and dashboard metrics.
+- `POST /api/workspace` with `action: "append-event"` saves companion cue events into the local workspace file.
+
+The storage layer is intentionally simple for local development. Replace it with a production database, authentication, consent records, audit logs, and abuse controls before handling real personal health or care data.
+
+## Safety stance
+
+Second Brain presents support recommendations, not diagnoses. It avoids raw surveillance views by default, separates autonomous attempts from AI-assisted completion, and uses uncertainty language for every caregiver/clinician notice.

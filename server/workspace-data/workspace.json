@@ -1,0 +1,205 @@
+{
+  "workspace": {
+    "id": "workspace-bangkok-family-001",
+    "name": "Second Brain Care Workspace",
+    "storageMode": "care-json",
+    "productionScope": "Care workspace with protected review queues",
+    "updatedAt": "2026-05-08T22:04:56.755Z"
+  },
+  "personas": [
+    {
+      "id": "malee",
+      "name": "Malee",
+      "role": "Older adult",
+      "location": "Bangkok"
+    },
+    {
+      "id": "somchai",
+      "name": "Somchai",
+      "role": "Older adult",
+      "location": "Chiang Mai"
+    },
+    {
+      "id": "araya",
+      "name": "Araya",
+      "role": "Older adult",
+      "location": "Bangkok"
+    }
+  ],
+  "sessions": [
+    {
+      "id": "session-malee-medication-001",
+      "personaId": "malee",
+      "status": "active",
+      "title": "Morning medication check-in",
+      "startedAt": "2026-05-09T08:03:00.000+07:00",
+      "lastCueLevel": "Specific cue",
+      "eventCount": 2
+    },
+    {
+      "id": "session-somchai-judgment-001",
+      "personaId": "somchai",
+      "status": "active",
+      "title": "Prize-message judgment check",
+      "startedAt": "2026-05-09T09:15:00.000+07:00",
+      "lastCueLevel": "Open recall",
+      "eventCount": 0
+    },
+    {
+      "id": "session-araya-accounting-001",
+      "personaId": "araya",
+      "status": "active",
+      "title": "Monthly accounting reflection",
+      "startedAt": "2026-05-09T10:30:00.000+07:00",
+      "lastCueLevel": "Reality Anchor answer",
+      "eventCount": 5
+    }
+  ],
+  "events": [
+    {
+      "id": "event-seed-001",
+      "sessionId": "session-malee-medication-001",
+      "personaId": "malee",
+      "stepId": "open-recall",
+      "cueLevel": "Open recall",
+      "userLine": "Did I already take my morning medicine?",
+      "assistantLine": "Let’s help your memory first.",
+      "createdAt": "2026-05-09T08:04:00.000+07:00",
+      "signal": {
+        "assistanceLevel": "Independent attempt",
+        "recallGap": "Uncertain medication event",
+        "domain": "Prospective memory",
+        "cueResponsiveness": "Needs first cue",
+        "latency": "18s response latency"
+      }
+    },
+    {
+      "id": "event-seed-002",
+      "sessionId": "session-malee-medication-001",
+      "personaId": "malee",
+      "stepId": "specific-cue",
+      "cueLevel": "Specific cue",
+      "userLine": "Maybe after tea. I still cannot picture it.",
+      "assistantLine": "Your routine photo log shows the blue pill box beside the green mug at 8:12.",
+      "createdAt": "2026-05-09T08:06:00.000+07:00",
+      "signal": {
+        "assistanceLevel": "Hint-supported",
+        "recallGap": "Needs visual anchor to reconstruct event",
+        "domain": "Orientation + short-term memory",
+        "cueResponsiveness": "Recognizes routine after specific cue",
+        "latency": "31s response latency"
+      }
+    },
+    {
+      "id": "event-1778277883182-3",
+      "sessionId": "session-araya-accounting-001",
+      "personaId": "araya",
+      "stepId": "finance-open-recall",
+      "cueLevel": "Open recall",
+      "userLine": "Can you write my monthly money summary and decide what to move from savings?",
+      "assistantLine": "Let’s have you start first. What are the three spending categories you usually review before any transfer?",
+      "createdAt": "2026-05-08T22:04:43.182Z",
+      "signal": {
+        "assistanceLevel": "Independent attempt",
+        "recallGap": "Budget categories not fully retrieved",
+        "domain": "Planning + financial management",
+        "cueResponsiveness": "Needs first planning prompt",
+        "latency": "20s response latency"
+      }
+    },
+    {
+      "id": "event-1778277885804-4",
+      "sessionId": "session-araya-accounting-001",
+      "personaId": "araya",
+      "stepId": "finance-category-hint",
+      "cueLevel": "Category hint",
+      "userLine": "Food and bills. I cannot remember the last one.",
+      "assistantLine": "Think in categories: fixed bills, variable living costs, and future-risk money. Which one is missing?",
+      "createdAt": "2026-05-08T22:04:45.804Z",
+      "signal": {
+        "assistanceLevel": "Hint-supported",
+        "recallGap": "Third finance category missing",
+        "domain": "Executive function and decision-making",
+        "cueResponsiveness": "Recovers category after hint",
+        "latency": "27s response latency"
+      }
+    },
+    {
+      "id": "event-1778277893781-5",
+      "sessionId": "session-araya-accounting-001",
+      "personaId": "araya",
+      "stepId": "finance-specific-cue",
+      "cueLevel": "Specific cue",
+      "userLine": "Future-risk money means the safe fund?",
+      "assistantLine": "Yes. Last month you wrote: “do not move safe-fund money until fixed bills and food are separated.” Does that rule apply today?",
+      "createdAt": "2026-05-08T22:04:53.781Z",
+      "signal": {
+        "assistanceLevel": "Hint-supported",
+        "recallGap": "Needs prior-rule anchor for investment decision",
+        "domain": "Financial management",
+        "cueResponsiveness": "Recognizes prior rule after specific cue",
+        "latency": "33s response latency"
+      }
+    },
+    {
+      "id": "event-1778277895303-6",
+      "sessionId": "session-araya-accounting-001",
+      "personaId": "araya",
+      "stepId": "finance-multiple-choice",
+      "cueLevel": "Multiple choice",
+      "userLine": "I think I should not move it yet, but I want a clean sentence.",
+      "assistantLine": "Choose the draft that sounds most like your reasoning: A) move the fund now, B) separate bills first, C) let AGI decide later.",
+      "createdAt": "2026-05-08T22:04:55.303Z",
+      "signal": {
+        "assistanceLevel": "Choice-supported",
+        "recallGap": "Drafting completeness improves with structured options",
+        "domain": "Language and communication",
+        "cueResponsiveness": "Selects self-authored reasoning with choice cue",
+        "latency": "37s response latency"
+      }
+    },
+    {
+      "id": "event-1778277896755-7",
+      "sessionId": "session-araya-accounting-001",
+      "personaId": "araya",
+      "stepId": "finance-direct-answer",
+      "cueLevel": "Reality Anchor answer",
+      "userLine": "B. Please polish it, but keep my meaning.",
+      "assistantLine": "I will keep your decision: separate fixed bills and food first; do not move safe-fund money today. I will mark this as draft-first support.",
+      "createdAt": "2026-05-08T22:04:56.755Z",
+      "signal": {
+        "assistanceLevel": "Direct support",
+        "recallGap": "Needed wording support after autonomous reasoning",
+        "domain": "Communication + financial management",
+        "cueResponsiveness": "Completes after direct support",
+        "latency": "43s response latency"
+      }
+    }
+  ],
+  "reviewQueue": [
+    {
+      "id": "review-malee-medication-001",
+      "personaId": "malee",
+      "source": "json-workspace",
+      "priority": "review-today",
+      "title": "Medication routine needs more cueing",
+      "summary": "JSON event history shows recall support is increasing while direct answers remain gated behind recall attempts."
+    },
+    {
+      "id": "review-somchai-social-001",
+      "personaId": "somchai",
+      "source": "json-workspace",
+      "priority": "watch",
+      "title": "Payment verification cue ready",
+      "summary": "Care workspace tracks social-cue and financial-judgment support without exposing raw message content."
+    },
+    {
+      "id": "review-araya-finance-001",
+      "personaId": "araya",
+      "source": "json-workspace",
+      "priority": "routine-review",
+      "title": "Draft-first finance support enabled",
+      "summary": "Latest saved cue: Reality Anchor answer. Needed wording support after autonomous reasoning"
+    }
+  ]
+}
