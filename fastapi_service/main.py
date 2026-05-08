@@ -87,6 +87,12 @@ class RealtimeSessionRequest(BaseModel):
     instructions: Optional[str] = Field(default=None, max_length=1200)
 
 
+class VoiceTurnRequest(BaseModel):
+    personaId: str = Field(min_length=1, max_length=20)
+    question: str = Field(min_length=1, max_length=300)
+    transcript: str = Field(min_length=1, max_length=1200)
+
+
 class WorkspaceEvent(BaseModel):
     personaId: str
     sessionId: str
@@ -313,6 +319,43 @@ def append_workspace_event(input_event: WorkspaceEvent) -> dict[str, Any]:
     return {"event": event, "summary": build_workspace_summary(state)}
 
 
+def voice_turn_reply(payload: VoiceTurnRequest) -> dict[str, Any]:
+    persona_id = payload.personaId.strip()
+    if persona_id not in ALLOWED_PERSONA_IDS:
+        raise HTTPException(status_code=422, detail=["personaId must match a supported care persona"])
+    transcript = payload.transcript.strip()
+    heard_line = transcript.rstrip(".!?")
+    if persona_id == "malee":
+        reply = (
+            f"Thanks, Malee. I heard: {heard_line}. Before we rely on the log, try one clue: picture the blue pill box near breakfast, "
+            "then check the routine record if you still feel unsure."
+        )
+        domain = "Medication recall"
+        score = 66
+    elif persona_id == "somchai":
+        reply = (
+            f"Thanks, Somchai. I heard: {heard_line}. Do not share account numbers or money details. Pause, save the number, "
+            "and call Nok before responding."
+        )
+        domain = "Financial safety"
+        score = 82
+    else:
+        reply = (
+            f"Thanks, Araya. I heard: {heard_line}. Keep your own finance reasoning active first: name one expense category, "
+            "then I can help summarize without taking over."
+        )
+        domain = "Financial planning"
+        score = 62
+    return {
+        "ok": True,
+        "personaId": persona_id,
+        "question": payload.question.strip(),
+        "transcript": transcript,
+        "reply": reply,
+        "signal": {"severity": severity_for(score), "supportScore": score, "domain": domain},
+    }
+
+
 def client_ip(request: Request) -> str:
     forwarded = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
     return forwarded or (request.client.host if request.client else "unknown")
@@ -411,6 +454,7 @@ def health() -> dict[str, Any]:
         "hasOpenAiKey": bool(os.getenv("OPENAI_API_KEY")),
         "model": os.getenv("SECOND_BRAIN_MODEL") or os.getenv("OPENAI_MODEL") or DEFAULT_MODEL,
         "companionPath": "/v1/companion",
+        "voiceTurnPath": "/v1/voice/turn",
         "realtimePath": "/v1/realtime/session",
         "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
     }
@@ -431,7 +475,20 @@ def provider_status() -> dict[str, Any]:
         "model": model,
         "reason": "",
         "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
+        "voiceTurnReady": True,
     }
+
+
+@app.post("/v1/voice/turn", dependencies=[Depends(require_bearer)])
+def voice_turn(payload: VoiceTurnRequest, request: Request) -> dict[str, Any]:
+    check_rate_limit(request)
+    return voice_turn_reply(payload)
+
+
+@app.post("/api/voice-turn", dependencies=[Depends(require_bearer)])
+def api_voice_turn(payload: VoiceTurnRequest, request: Request) -> dict[str, Any]:
+    check_rate_limit(request)
+    return voice_turn_reply(payload)
 
 
 @app.post("/v1/realtime/session", dependencies=[Depends(require_bearer)])

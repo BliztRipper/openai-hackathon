@@ -51,6 +51,7 @@ class FastApiContractTest(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertEqual(data["service"], "second-brain-fastapi")
         self.assertEqual(data["companionPath"], "/v1/companion")
+        self.assertEqual(data["voiceTurnPath"], "/v1/voice/turn")
 
     def test_v1_companion_accepts_express_contract(self):
         response = self.client.post("/v1/companion", json=EXPRESS_PAYLOAD)
@@ -115,6 +116,37 @@ class FastApiContractTest(unittest.TestCase):
         response = self.client.post("/v1/realtime/session", json={"personaId": "malee"})
         self.assertEqual(response.status_code, 503)
         self.assertIn("OpenAI", response.json()["detail"])
+
+    def test_voice_turn_returns_persona_specific_reply(self):
+        response = self.client.post(
+            "/v1/voice/turn",
+            json={
+                "personaId": "somchai",
+                "question": "Hi Somchai, there are some suspicious numbers calling you.",
+                "transcript": "They asked me to send my account number.",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["personaId"], "somchai")
+        self.assertIn("account", data["reply"].lower())
+        self.assertIn("Nok", data["reply"])
+
+    def test_api_voice_turn_accepts_frontend_contract(self):
+        response = self.client.post(
+            "/api/voice-turn",
+            json={
+                "personaId": "malee",
+                "question": "Hi Malee, Did I already take the morning medicine yet?",
+                "transcript": "I remember the green mug but not the pill box.",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["personaId"], "malee")
+        self.assertIn("blue pill box", data["reply"])
 
     def test_workspace_summary_is_available(self):
         response = self.client.get("/api/workspace")

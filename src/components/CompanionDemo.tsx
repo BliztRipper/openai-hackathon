@@ -5,8 +5,9 @@ import { requestCompanionInsight, type CompanionApiResponse } from '../lib/compa
 import { saveWorkspaceEvent, type WorkspaceSummary } from '../lib/workspaceApi';
 import { deterministicInteractionAdapter } from '../lib/interactionAdapter';
 import type { PersonaId } from '../data/personas';
-import { ArrowIcon, BrainIcon, CheckIcon, PulseIcon, ShieldIcon } from './Icons';
+import { ArrowIcon, BrainIcon, CheckIcon, ShieldIcon } from './Icons';
 import { SignalRail } from './SignalRail';
+import { OneTurnVoiceCard } from './OneTurnVoiceCard';
 
 type Props = {
   personaId: PersonaId;
@@ -102,14 +103,7 @@ export function CompanionDemo({ personaId, workspace, onWorkspaceUpdate, onConti
             </div>
           </div>
 
-          <div className="voice-first-card">
-            <PulseIcon />
-            <div>
-              <strong>Hands-free mode</strong>
-              <p>Listening can stay active to reduce typing burden; large controls keep the session easy to review and adjust.</p>
-            </div>
-            <span>Voice ready</span>
-          </div>
+          <OneTurnVoiceCard personaId={personaId} personaName={persona.name} />
 
           <div className="workspace-status-card">
             <span className="eyebrow">Care workspace</span>

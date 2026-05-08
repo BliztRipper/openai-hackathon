@@ -79,6 +79,52 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  if (path === '/api/voice-turn') {
+    if (req.method !== 'POST') {
+      methodNotAllowed(res);
+      return;
+    }
+    try {
+      const baseUrl = normalizeSecondBrainExpressBaseUrl(process.env.SECOND_BRAIN_API_BASE_URL);
+      const token = process.env.SECOND_BRAIN_API_TOKEN || process.env.BACKEND_BEARER_TOKEN;
+      if (baseUrl && token) {
+        const body = await readJsonBody(req);
+        const response = await fetch(`${baseUrl}/v1/voice/turn`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        });
+        const json = await response.json();
+        sendJson(res, response.status, json);
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      const transcript = String(body?.transcript || '').trim();
+      const personaId = String(body?.personaId || '');
+      const replies = {
+        malee: 'Use the blue pill-box clue first: the morning medicine is normally taken after breakfast. If the slot is still full, take it now and mark it complete.',
+        somchai: 'Do not share account details or transfer money. Save the number, let the call go to voicemail, and ask Nok to check it with you.',
+        araya: 'Keep the finance reasoning active: name the expense category, compare it with this week’s plan, then I will summarize the safest next step.',
+      };
+      sendJson(res, 200, {
+        ok: true,
+        personaId,
+        question: String(body?.question || ''),
+        transcript,
+        reply: replies[personaId] || 'I heard you. I will keep this to one response and guide the next safe step.',
+        signal: { severity: personaId === 'somchai' ? 'critical' : 'watch', supportScore: personaId === 'somchai' ? 28 : 62, domain: 'voice-support' },
+      });
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
+        return;
+      }
+      sendJson(res, 500, { ok: false, error: 'Unable to process voice answer.' });
+    }
+    return;
+  }
+
   if (path === '/api/workspace') {
     if (req.method === 'GET') {
       const state = await loadWorkspace(process.env.WORKSPACE_JSON_PATH || defaultWorkspacePath);

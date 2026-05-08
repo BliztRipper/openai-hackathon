@@ -46,6 +46,7 @@ FastAPI routes:
 - `GET /api/workspace` and `POST /api/workspace` expose the care workspace.
 - `GET /docs` opens the FastAPI API reference.
 - `POST /v1/realtime/session` creates a short-lived OpenAI Realtime client secret for browser voice sessions.
+- `POST /v1/voice/turn` and `/api/voice-turn` process one spoken answer and return one persona-specific spoken reply.
 
 Optional environment variables:
 
@@ -61,7 +62,7 @@ CORS_ALLOW_ORIGIN=https://your-domain.example
 WORKSPACE_JSON_PATH=/path/to/workspace.json
 ```
 
-The browser never receives a standard API key. For voice, call `/api/realtime-session` from the product server or `/v1/realtime/session` from a trusted backend with the service bearer token; the response returns only a short-lived Realtime client secret. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
+The browser never receives a standard API key. For realtime voice sessions, call `/api/realtime-session` from the product server or `/v1/realtime/session` from a trusted backend with the service bearer token; the response returns only a short-lived Realtime client secret. For the one-turn help flow, the browser calls `/api/voice-turn`; the product server forwards the transcript to `/v1/voice/turn` with the service bearer token. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
 
 ## Care workspace
 
