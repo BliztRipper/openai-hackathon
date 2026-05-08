@@ -5,7 +5,7 @@ Second Brain is a post-AGI cognitive wellness co-pilot for healthy aging. It hel
 ## Product scope
 
 - React + Vite + TypeScript frontend.
-- Server-side companion insight endpoint with protected continuity behavior when provider access is unavailable.
+- Server-side companion insight endpoint with a FastAPI service option and protected continuity behavior when provider access is unavailable.
 - JSON care workspace for local product state during development.
 - Elderly-first UI: large readable text, voice-first interaction framing, visible consent boundaries, and non-diagnostic support language.
 - Care dashboard: cognitive-domain trends, necessary notices, capability-inflation signals, companion-boundary signals, and validation-readiness mapping.
@@ -14,7 +14,8 @@ Second Brain is a post-AGI cognitive wellness co-pilot for healthy aging. It hel
 
 ```bash
 npm install
-npm run dev:full
+python3 -m pip install -r requirements.txt
+npm run dev:full:fastapi
 ```
 
 Open `http://localhost:5173`.
@@ -22,6 +23,7 @@ Open `http://localhost:5173`.
 Useful commands:
 
 ```bash
+npm run test:fastapi
 npm run test
 npm run build
 npm run smoke
@@ -29,13 +31,27 @@ npm run smoke
 
 ## Server configuration
 
-The companion insight service is implemented at `/api/companion`. It proxies the Second Brain Express API from `http://206.189.235.67:8787/docs` when `SECOND_BRAIN_API_TOKEN` is configured. `/api/provider-status` checks remote health and whether the server is ready to call authenticated companion routes. Provider credentials stay server-side.
+The companion insight service is available through `/api/companion`. For a FastAPI backend with interactive docs and the same product contract, run:
+
+```bash
+python3 -m pip install -r requirements.txt
+npm run dev:full:fastapi
+```
+
+FastAPI routes:
+
+- `GET /health` checks service readiness.
+- `POST /v1/companion` accepts the service-to-service companion contract.
+- `POST /api/companion` accepts the frontend companion contract.
+- `GET /api/workspace` and `POST /api/workspace` expose the care workspace.
+- `GET /docs` opens the FastAPI API reference.
 
 Optional environment variables:
 
 ```bash
-SECOND_BRAIN_API_BASE_URL=http://206.189.235.67:8787
+SECOND_BRAIN_API_BASE_URL=http://localhost:8787
 SECOND_BRAIN_API_TOKEN=<server-side-bearer-token>
+BACKEND_BEARER_TOKEN=<same-service-bearer-token>
 SECOND_BRAIN_MODEL=gpt-5.5-pro
 OPENAI_API_KEY=<optional-server-side-key>
 COMPANION_API_TOKEN=<optional-local-session-token>
@@ -43,7 +59,7 @@ CORS_ALLOW_ORIGIN=https://your-domain.example
 WORKSPACE_JSON_PATH=/path/to/workspace.json
 ```
 
-The browser never receives a standard API key. If the remote service is unavailable or the bearer token is not configured, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
+The browser never receives a standard API key. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
 
 ## Care workspace
 

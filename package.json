@@ -10,7 +10,10 @@
     "test": "vitest run",
     "dev:api": "node server/dev-api.mjs",
     "dev:full": "sh -c 'node server/dev-api.mjs & vite --host 0.0.0.0'",
-    "smoke": "node scripts/smoke-app.mjs"
+    "smoke": "node scripts/smoke-app.mjs",
+    "dev:fastapi": "PYTHONPATH=. python3 -m uvicorn fastapi_service.main:app --host 0.0.0.0 --port 8787",
+    "dev:full:fastapi": "sh -c 'PYTHONPATH=. python3 -m uvicorn fastapi_service.main:app --host 0.0.0.0 --port 8787 & vite --host 0.0.0.0'",
+    "test:fastapi": "PYTHONPATH=. python3 -m unittest fastapi_service.test_contract"
   },
   "dependencies": {
     "react": "latest",

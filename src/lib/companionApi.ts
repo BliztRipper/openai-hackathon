@@ -20,7 +20,7 @@ export type RubricEvidence = {
 
 export type CompanionApiResponse = {
   ok: boolean;
-  mode: 'openai' | 'express' | 'protected';
+  mode: 'openai' | 'express' | 'fastapi' | 'protected';
   source: string;
   model: string | null;
   generatedAt: string;
@@ -36,7 +36,7 @@ export type ProviderStatus = {
   ok: boolean;
   reachable: boolean;
   companionReady: boolean;
-  activeProvider?: 'second-brain-express' | 'openai-responses-api' | 'unconfigured';
+  activeProvider?: 'second-brain-express' | 'second-brain-fastapi' | 'openai-responses-api' | 'unconfigured';
   service?: string;
   authMode?: string;
   hasOpenAiKey?: boolean;
