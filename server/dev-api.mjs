@@ -88,7 +88,7 @@ const server = createServer(async (req, res) => {
       const baseUrl = normalizeSecondBrainExpressBaseUrl(process.env.SECOND_BRAIN_API_BASE_URL);
       const token = process.env.SECOND_BRAIN_API_TOKEN || process.env.BACKEND_BEARER_TOKEN;
       if (baseUrl && token) {
-        const body = await readJsonBody(req);
+        const body = await readJsonBody(req, 1_500_000);
         const response = await fetch(`${baseUrl}/v1/voice/turn`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -99,7 +99,7 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const body = await readJsonBody(req);
+      const body = await readJsonBody(req, 1_500_000);
       const transcript = String(body?.transcript || '').trim();
       const personaId = String(body?.personaId || '');
       const replies = {
@@ -121,6 +121,46 @@ const server = createServer(async (req, res) => {
         return;
       }
       sendJson(res, 500, { ok: false, error: 'Unable to process voice answer.' });
+    }
+    return;
+  }
+
+  if (path === '/api/voice-prompt') {
+    if (req.method !== 'POST') {
+      methodNotAllowed(res);
+      return;
+    }
+    try {
+      const baseUrl = normalizeSecondBrainExpressBaseUrl(process.env.SECOND_BRAIN_API_BASE_URL);
+      const token = process.env.SECOND_BRAIN_API_TOKEN || process.env.BACKEND_BEARER_TOKEN;
+      if (baseUrl && token) {
+        const body = await readJsonBody(req);
+        const response = await fetch(`${baseUrl}/v1/voice/prompt`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        });
+        const json = await response.json();
+        sendJson(res, response.status, json);
+        return;
+      }
+
+      const body = await readJsonBody(req);
+      sendJson(res, 200, {
+        ok: true,
+        personaId: String(body?.personaId || ''),
+        question: String(body?.question || ''),
+        audioVoice: String(body?.audioVoice || 'alloy'),
+        audioFormat: 'wav',
+        audioData: '',
+        source: 'text-continuity',
+      });
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        sendJson(res, 400, { ok: false, error: 'Invalid JSON body' });
+        return;
+      }
+      sendJson(res, 500, { ok: false, error: 'Unable to create voice prompt.' });
     }
     return;
   }

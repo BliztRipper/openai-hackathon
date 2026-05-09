@@ -1,14 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PersonaId } from '../data/personas';
-import { getVoicePrompt, requestVoiceTurn, type VoiceGender } from '../lib/voiceTurn';
+import { createWavRecorder, type CapturedWavAudio } from '../lib/audioCapture';
+import { getVoicePrompt, requestVoicePrompt, requestVoiceTurn } from '../lib/voiceTurn';
 import { CheckIcon, PulseIcon } from './Icons';
-
-type SpeechRecognitionConstructor = new () => SpeechRecognition;
-
-type BrowserWindow = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructor;
-  webkitSpeechRecognition?: SpeechRecognitionConstructor;
-};
 
 type Props = {
   personaId: PersonaId;
@@ -16,25 +10,26 @@ type Props = {
 };
 
 type VoiceStatus = 'ready' | 'greeting' | 'listening' | 'processing' | 'replying' | 'complete' | 'error';
+type RecorderHandle = Awaited<ReturnType<typeof createWavRecorder>>;
 
-function personaSeed(personaId: PersonaId) {
-  return personaId.split('').reduce((total, char) => total + char.charCodeAt(0), 0);
+function dataAudioUrl(audioData: string, audioFormat = 'wav') {
+  return `data:audio/${audioFormat};base64,${audioData}`;
 }
 
-function genderScore(voice: SpeechSynthesisVoice, gender: VoiceGender) {
-  const name = `${voice.name} ${voice.voiceURI}`.toLowerCase();
-  const femaleNames = ['female', 'samantha', 'victoria', 'karen', 'zira', 'susan', 'joanna', 'aria'];
-  const maleNames = ['male', 'daniel', 'alex', 'david', 'mark', 'george', 'guy', 'ryan'];
-  const list = gender === 'female' ? femaleNames : maleNames;
-  return list.some((item) => name.includes(item)) ? 2 : voice.lang?.toLowerCase().startsWith('en') ? 1 : 0;
-}
-
-function chooseVoice(voices: SpeechSynthesisVoice[], gender: VoiceGender, personaId: PersonaId) {
-  if (voices.length === 0) return undefined;
-  const ranked = [...voices].sort((a, b) => genderScore(b, gender) - genderScore(a, gender));
-  const topScore = genderScore(ranked[0], gender);
-  const pool = ranked.filter((voice) => genderScore(voice, gender) === topScore);
-  return pool[personaSeed(personaId) % pool.length];
+function fallbackSpeak(text: string, voiceHint: 'male' | 'female') {
+  return new Promise<void>((resolve, reject) => {
+    if (!('speechSynthesis' in window)) {
+      reject(new Error('Voice playback is not available in this browser.'));
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.92;
+    utterance.pitch = voiceHint === 'female' ? 1.05 : 0.9;
+    utterance.onend = () => resolve();
+    utterance.onerror = () => reject(new Error('Voice playback stopped before finishing.'));
+    window.speechSynthesis.speak(utterance);
+  });
 }
 
 export function OneTurnVoiceCard({ personaId, personaName }: Props) {
@@ -44,9 +39,39 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
   const [typedAnswer, setTypedAnswer] = useState('');
   const [reply, setReply] = useState('');
   const [error, setError] = useState('');
-  const [supportsSpeechRecognition, setSupportsSpeechRecognition] = useState(true);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const [supportsMicrophone, setSupportsMicrophone] = useState(true);
+  const [activeVoice, setActiveVoice] = useState(prompt.audioVoice);
+  const recorderRef = useRef<RecorderHandle | null>(null);
+  const listeningTimerRef = useRef<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const autoStartedRef = useRef<PersonaId | null>(null);
+
+  const stopActiveAudio = () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+    window.speechSynthesis?.cancel();
+  };
+
+  const clearListeningTimer = () => {
+    if (listeningTimerRef.current) window.clearTimeout(listeningTimerRef.current);
+    listeningTimerRef.current = null;
+  };
+
+  const playGeneratedAudio = async (audioData: string | undefined, audioFormat: string | undefined, fallbackText: string, phase: VoiceStatus) => {
+    setStatus(phase);
+    stopActiveAudio();
+    if (!audioData) {
+      await fallbackSpeak(fallbackText, prompt.voiceGender);
+      return;
+    }
+    await new Promise<void>((resolve, reject) => {
+      const audio = new Audio(dataAudioUrl(audioData, audioFormat || 'wav'));
+      audioRef.current = audio;
+      audio.onended = () => resolve();
+      audio.onerror = () => reject(new Error('Generated voice could not be played.'));
+      void audio.play().catch(reject);
+    });
+  };
 
   useEffect(() => {
     setStatus('ready');
@@ -54,42 +79,26 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
     setTypedAnswer('');
     setReply('');
     setError('');
+    setActiveVoice(prompt.audioVoice);
     autoStartedRef.current = null;
-  }, [personaId]);
+  }, [personaId, prompt.audioVoice]);
 
   useEffect(() => () => {
-    recognitionRef.current?.abort();
-    window.speechSynthesis?.cancel();
+    clearListeningTimer();
+    recorderRef.current?.cancel();
+    stopActiveAudio();
   }, []);
 
-  const speak = (text: string, phase: VoiceStatus) => new Promise<void>((resolve, reject) => {
-    if (!('speechSynthesis' in window)) {
-      reject(new Error('Voice playback is not available in this browser.'));
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const voice = chooseVoice(voices, prompt.voiceGender, personaId);
-    if (voice) utterance.voice = voice;
-    utterance.rate = 0.92;
-    utterance.pitch = prompt.voiceGender === 'female' ? 1.08 : 0.9;
-    utterance.onstart = () => setStatus(phase);
-    utterance.onend = () => resolve();
-    utterance.onerror = () => reject(new Error('Voice playback stopped before finishing.'));
-    window.speechSynthesis.speak(utterance);
-  });
-
-  const processAnswer = async (spokenText: string) => {
-    const answer = spokenText.trim();
-    if (!answer) return;
-    setTranscript(answer);
+  const processAnswer = async (answer: CapturedWavAudio | string) => {
     setStatus('processing');
     setError('');
+    const answerTranscript = typeof answer === 'string' ? answer.trim() : 'Spoken answer captured.';
+    setTranscript(answerTranscript);
     try {
-      const result = await requestVoiceTurn(personaId, answer);
+      const result = await requestVoiceTurn(personaId, typeof answer === 'string' ? answer : { ...answer, transcript: answerTranscript });
       setReply(result.reply);
-      await speak(result.reply, 'replying');
+      setActiveVoice(result.audioVoice || prompt.audioVoice);
+      await playGeneratedAudio(result.audioData, result.audioFormat, result.reply, 'replying');
       setStatus('complete');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to process this voice answer.');
@@ -97,48 +106,55 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
     }
   };
 
-  const listenOnce = () => {
-    const browserWindow = window as BrowserWindow;
-    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-    if (!Recognition) {
-      setSupportsSpeechRecognition(false);
+  const finishListening = async () => {
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    recorderRef.current = null;
+    clearListeningTimer();
+    try {
+      const captured = await recorder.stop();
+      await processAnswer(captured);
+    } catch (caught) {
+      setSupportsMicrophone(false);
+      setError(caught instanceof Error ? caught.message : 'Microphone capture is unavailable. Type one answer instead.');
+      setStatus('listening');
+    }
+  };
+
+  const startListening = async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setSupportsMicrophone(false);
       setStatus('listening');
       return;
     }
-    setSupportsSpeechRecognition(true);
-    const recognition = new Recognition();
-    recognitionRef.current = recognition;
-    recognition.lang = 'en-US';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    let heardResult = false;
-    let hadError = false;
-    recognition.onstart = () => setStatus('listening');
-    recognition.onerror = () => {
-      hadError = true;
-      setError('I could not hear the answer clearly. Please try once more or type the answer.');
-      setStatus('error');
-    };
-    recognition.onresult = (event) => {
-      heardResult = true;
-      const text = event.results?.[0]?.[0]?.transcript ?? '';
-      void processAnswer(text);
-    };
-    recognition.onend = () => {
-      if (!heardResult && !hadError) setStatus('ready');
-    };
-    recognition.start();
+    try {
+      const recorder = await createWavRecorder();
+      recorderRef.current = recorder;
+      setSupportsMicrophone(true);
+      setStatus('listening');
+      listeningTimerRef.current = window.setTimeout(() => {
+        void finishListening();
+      }, 6500);
+    } catch {
+      setSupportsMicrophone(false);
+      setStatus('listening');
+      setError('Microphone permission is needed. Type one answer if you prefer.');
+    }
   };
 
   const startTurn = async () => {
     setReply('');
     setTranscript('');
+    setTypedAnswer('');
     setError('');
-    recognitionRef.current?.abort();
+    clearListeningTimer();
+    recorderRef.current?.cancel();
+    recorderRef.current = null;
     try {
-      await speak(prompt.question, 'greeting');
-      listenOnce();
+      const generatedPrompt = await requestVoicePrompt(personaId);
+      setActiveVoice(generatedPrompt.audioVoice || prompt.audioVoice);
+      await playGeneratedAudio(generatedPrompt.audioData, generatedPrompt.audioFormat, prompt.question, 'greeting');
+      await startListening();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Voice playback is unavailable.');
       setStatus('error');
@@ -157,10 +173,10 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
 
   const statusText = {
     ready: 'Ready for a one-turn voice check',
-    greeting: 'Asking the first question…',
-    listening: supportsSpeechRecognition ? 'Listening for one answer…' : 'Type one answer below…',
+    greeting: 'Asking with a natural generated voice…',
+    listening: supportsMicrophone ? 'Listening now. Answer in one sentence…' : 'Type one answer below…',
     processing: 'Processing the spoken answer…',
-    replying: 'Answering back…',
+    replying: 'Answering back with the same voice…',
     complete: 'One-turn voice check complete',
     error: 'Voice check needs one more try',
   }[status];
@@ -171,7 +187,7 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
         <PulseIcon />
         <div>
           <span className="eyebrow">One-turn voice support</span>
-          <strong>{personaName} · {prompt.voiceGender === 'female' ? 'Warm voice' : 'Steady voice'}</strong>
+          <strong>{personaName} · consistent {activeVoice} voice</strong>
           <p>{statusText}</p>
         </div>
       </div>
@@ -195,7 +211,7 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
         </div>
       )}
 
-      {!supportsSpeechRecognition && status === 'listening' && (
+      {!supportsMicrophone && status === 'listening' && (
         <div className="voice-type-row">
           <input
             value={typedAnswer}
@@ -215,7 +231,12 @@ export function OneTurnVoiceCard({ personaId, personaName }: Props) {
         <button className="secondary-action" onClick={startTurn} disabled={status === 'greeting' || status === 'processing' || status === 'replying'}>
           {status === 'complete' ? 'Run voice check again' : 'Start voice check'}
         </button>
-        <button className="secondary-action" onClick={() => { window.speechSynthesis?.cancel(); recognitionRef.current?.abort(); setStatus('ready'); setError(''); }}>
+        {status === 'listening' && supportsMicrophone && (
+          <button className="secondary-action" onClick={() => void finishListening()}>
+            Finish answer
+          </button>
+        )}
+        <button className="secondary-action" onClick={() => { clearListeningTimer(); recorderRef.current?.cancel(); recorderRef.current = null; stopActiveAudio(); setStatus('ready'); setError(''); }}>
           Stop voice
         </button>
       </div>

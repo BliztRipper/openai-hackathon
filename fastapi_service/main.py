@@ -15,12 +15,15 @@ from pydantic import BaseModel, Field
 
 DEFAULT_MODEL = "gpt-5.5-pro"
 DEFAULT_REALTIME_MODEL = "gpt-realtime"
+DEFAULT_AUDIO_MODEL = "gpt-audio"
+OPENAI_AUDIO_CHAT_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_REALTIME_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_WORKSPACE_PATH = ROOT_DIR / "server" / "workspace-data" / "workspace.json"
 MAX_REQUESTS_PER_MINUTE = 30
 
 ALLOWED_PERSONA_IDS = {"malee", "somchai", "araya"}
+PERSONA_AUDIO_VOICES = {"malee": "shimmer", "somchai": "onyx", "araya": "nova"}
 ALLOWED_CUE_LEVELS = {
     "Open recall",
     "Category hint",
@@ -90,7 +93,16 @@ class RealtimeSessionRequest(BaseModel):
 class VoiceTurnRequest(BaseModel):
     personaId: str = Field(min_length=1, max_length=20)
     question: str = Field(min_length=1, max_length=300)
-    transcript: str = Field(min_length=1, max_length=1200)
+    transcript: str = Field(default="Spoken answer captured.", min_length=1, max_length=1200)
+    audioData: Optional[str] = Field(default=None, max_length=1_500_000)
+    audioFormat: str = Field(default="wav", max_length=12)
+    audioVoice: Optional[str] = Field(default=None, max_length=40)
+
+
+class VoicePromptRequest(BaseModel):
+    personaId: str = Field(min_length=1, max_length=20)
+    question: str = Field(min_length=1, max_length=300)
+    audioVoice: Optional[str] = Field(default=None, max_length=40)
 
 
 class WorkspaceEvent(BaseModel):
@@ -319,10 +331,160 @@ def append_workspace_event(input_event: WorkspaceEvent) -> dict[str, Any]:
     return {"event": event, "summary": build_workspace_summary(state)}
 
 
+def audio_voice_for(persona_id: str, requested: Optional[str] = None) -> str:
+    stable_voice = PERSONA_AUDIO_VOICES.get(persona_id, "alloy")
+    return requested.strip() if requested and requested.strip() == stable_voice else stable_voice
+
+
+def voice_prompt_system(persona_id: str) -> str:
+    persona = persona_id.capitalize()
+    return (
+        f"You are Second Brain speaking to {persona}. Sound natural, calm, human, and supportive. "
+        "Speak exactly the requested line with no extra words. Keep the pace accessible for an older adult."
+    )
+
+
+def voice_turn_system(persona_id: str) -> str:
+    if persona_id == "malee":
+        context = "Medication recall support. Preserve recall effort before relying on the routine record."
+    elif persona_id == "somchai":
+        context = "Suspicious call and financial safety support. Be firm, calm, and protective."
+    else:
+        context = "Financial reasoning support. Preserve the user's own reasoning before summarizing."
+    return (
+        "You are Second Brain in a one-turn voice support flow. Reply once, then stop. "
+        "Use warm, natural, non-diagnostic language. Keep the reply under two short sentences. "
+        f"Context: {context}"
+    )
+
+
+def request_openai_gpt_audio(
+    messages: list[dict[str, Any]],
+    persona_id: str,
+    purpose: str,
+    max_tokens: int = 220,
+) -> dict[str, Any]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OpenAI API key is not configured for GPT-audio")
+    model = os.getenv("OPENAI_AUDIO_MODEL") or DEFAULT_AUDIO_MODEL
+    voice = audio_voice_for(persona_id)
+    body = {
+        "model": model,
+        "store": False,
+        "modalities": ["text", "audio"],
+        "audio": {"voice": voice, "format": "wav"},
+        "messages": messages,
+        "max_completion_tokens": max_tokens,
+    }
+    with httpx.Client(timeout=45) as client:
+        response = client.post(
+            OPENAI_AUDIO_CHAT_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=body,
+        )
+    if response.status_code >= 400:
+        detail = response.text[:240] or "OpenAI GPT-audio request failed"
+        raise HTTPException(status_code=response.status_code, detail=detail)
+    json_body = response.json()
+    message = ((json_body.get("choices") or [{}])[0].get("message") or {})
+    audio = message.get("audio") if isinstance(message.get("audio"), dict) else {}
+    text = str(message.get("content") or audio.get("transcript") or "").strip()
+    audio_data = str(audio.get("data") or "").strip()
+    return {
+        "text": text,
+        "audioData": audio_data,
+        "audioFormat": "wav",
+        "audioVoice": voice,
+        "source": "openai-gpt-audio",
+        "model": model,
+        "purpose": purpose,
+    }
+
+
+def voice_prompt_reply(payload: VoicePromptRequest) -> dict[str, Any]:
+    persona_id = payload.personaId.strip()
+    if persona_id not in ALLOWED_PERSONA_IDS:
+        raise HTTPException(status_code=422, detail=["personaId must match a supported care persona"])
+    question = payload.question.strip()
+    voice = audio_voice_for(persona_id, payload.audioVoice)
+    try:
+        audio = request_openai_gpt_audio(
+            [
+                {"role": "system", "content": voice_prompt_system(persona_id)},
+                {"role": "user", "content": f"Speak this exact line: {question}"},
+            ],
+            persona_id,
+            "prompt",
+            max_tokens=90,
+        )
+        return {
+            "ok": True,
+            "personaId": persona_id,
+            "question": question,
+            "audioVoice": voice,
+            "audioFormat": audio.get("audioFormat", "wav"),
+            "audioData": audio.get("audioData", ""),
+            "source": audio.get("source", "openai-gpt-audio"),
+            "model": audio.get("model"),
+        }
+    except HTTPException as exc:
+        print(f"[voice-prompt] GPT-audio fallback: {exc.detail}")
+        return {
+            "ok": True,
+            "personaId": persona_id,
+            "question": question,
+            "audioVoice": voice,
+            "audioFormat": "wav",
+            "audioData": "",
+            "source": "text-continuity",
+        }
+
+
 def voice_turn_reply(payload: VoiceTurnRequest) -> dict[str, Any]:
     persona_id = payload.personaId.strip()
     if persona_id not in ALLOWED_PERSONA_IDS:
         raise HTTPException(status_code=422, detail=["personaId must match a supported care persona"])
+    voice = audio_voice_for(persona_id, payload.audioVoice)
+    if payload.audioData and payload.audioFormat == "wav":
+        content: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": (
+                    f"Question asked first: {payload.question.strip()} "
+                    "Listen to the user's answer, infer only what is needed, and answer once."
+                ),
+            },
+            {"type": "input_audio", "input_audio": {"data": payload.audioData.strip(), "format": "wav"}},
+        ]
+        try:
+            audio = request_openai_gpt_audio(
+                [
+                    {"role": "system", "content": voice_turn_system(persona_id)},
+                    {"role": "user", "content": content},
+                ],
+                persona_id,
+                "turn",
+            )
+            reply = audio.get("text") or "I heard you. Use the safest next step and keep this to one voice reply."
+            score = 82 if persona_id == "somchai" else 66 if persona_id == "malee" else 62
+            domain = "Financial safety" if persona_id == "somchai" else "Medication recall" if persona_id == "malee" else "Financial planning"
+            return {
+                "ok": True,
+                "personaId": persona_id,
+                "question": payload.question.strip(),
+                "transcript": payload.transcript.strip(),
+                "reply": reply,
+                "audioVoice": voice,
+                "audioFormat": audio.get("audioFormat", "wav"),
+                "audioData": audio.get("audioData", ""),
+                "source": audio.get("source", "openai-gpt-audio"),
+                "model": audio.get("model"),
+                "signal": {"severity": severity_for(score), "supportScore": score, "domain": domain},
+            }
+        except HTTPException as exc:
+            print(f"[voice-turn] GPT-audio fallback: {exc.detail}")
+            pass
     transcript = payload.transcript.strip()
     heard_line = transcript.rstrip(".!?")
     if persona_id == "malee":
@@ -352,6 +514,10 @@ def voice_turn_reply(payload: VoiceTurnRequest) -> dict[str, Any]:
         "question": payload.question.strip(),
         "transcript": transcript,
         "reply": reply,
+        "audioVoice": voice,
+        "audioFormat": "wav",
+        "audioData": "",
+        "source": "text-continuity",
         "signal": {"severity": severity_for(score), "supportScore": score, "domain": domain},
     }
 
@@ -453,10 +619,13 @@ def health() -> dict[str, Any]:
         "authMode": "bearer" if env_token() else "open",
         "hasOpenAiKey": bool(os.getenv("OPENAI_API_KEY")),
         "model": os.getenv("SECOND_BRAIN_MODEL") or os.getenv("OPENAI_MODEL") or DEFAULT_MODEL,
+        "audioModel": os.getenv("OPENAI_AUDIO_MODEL") or DEFAULT_AUDIO_MODEL,
         "companionPath": "/v1/companion",
+        "voicePromptPath": "/v1/voice/prompt",
         "voiceTurnPath": "/v1/voice/turn",
         "realtimePath": "/v1/realtime/session",
         "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
+        "audioReady": bool(os.getenv("OPENAI_API_KEY")),
     }
 
 
@@ -476,7 +645,20 @@ def provider_status() -> dict[str, Any]:
         "reason": "",
         "realtimeReady": bool(os.getenv("OPENAI_API_KEY")),
         "voiceTurnReady": True,
+        "audioReady": bool(os.getenv("OPENAI_API_KEY")),
     }
+
+
+@app.post("/v1/voice/prompt", dependencies=[Depends(require_bearer)])
+def voice_prompt(payload: VoicePromptRequest, request: Request) -> dict[str, Any]:
+    check_rate_limit(request)
+    return voice_prompt_reply(payload)
+
+
+@app.post("/api/voice-prompt", dependencies=[Depends(require_bearer)])
+def api_voice_prompt(payload: VoicePromptRequest, request: Request) -> dict[str, Any]:
+    check_rate_limit(request)
+    return voice_prompt_reply(payload)
 
 
 @app.post("/v1/voice/turn", dependencies=[Depends(require_bearer)])

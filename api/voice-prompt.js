@@ -30,13 +30,13 @@ export default async function handler(req, res) {
   const baseUrl = normalizeSecondBrainExpressBaseUrl(process.env.SECOND_BRAIN_API_BASE_URL);
   const token = process.env.SECOND_BRAIN_API_TOKEN || process.env.BACKEND_BEARER_TOKEN || '';
   if (!baseUrl || !token) {
-    sendJson(res, 503, { ok: false, error: 'Voice support service is not configured.' });
+    sendJson(res, 503, { ok: false, error: 'Voice prompt service is not configured.' });
     return;
   }
 
   try {
-    const payload = await readJsonBody(req, 1_500_000);
-    const response = await fetch(`${baseUrl}/v1/voice/turn`, {
+    const payload = await readJsonBody(req);
+    const response = await fetch(`${baseUrl}/v1/voice/prompt`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const message = await safeReadText(response);
-      sendJson(res, response.status, { ok: false, error: 'Unable to process voice answer.', detail: message.slice(0, 240) });
+      sendJson(res, response.status, { ok: false, error: 'Unable to create voice prompt.', detail: message.slice(0, 240) });
       return;
     }
 
@@ -57,6 +57,6 @@ export default async function handler(req, res) {
       res.status(400).json({ ok: false, error: 'Invalid JSON body' });
       return;
     }
-    res.status(500).json({ ok: false, error: 'Unable to process voice answer.' });
+    res.status(500).json({ ok: false, error: 'Unable to create voice prompt.' });
   }
 }

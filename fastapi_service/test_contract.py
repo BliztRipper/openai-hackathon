@@ -133,6 +133,69 @@ class FastApiContractTest(unittest.TestCase):
         self.assertIn("account", data["reply"].lower())
         self.assertIn("Nok", data["reply"])
 
+    def test_voice_prompt_uses_stable_openai_audio_voice(self):
+        import fastapi_service.main as main
+
+        def fake_audio(messages, persona_id, purpose, max_tokens=220):
+            return {"text": "Hi Somchai, there are some suspicious numbers calling you.", "audioData": "UklGRg==", "audioFormat": "wav"}
+
+        original = main.request_openai_gpt_audio
+        main.request_openai_gpt_audio = fake_audio
+        try:
+            response = self.client.post(
+                "/v1/voice/prompt",
+                json={
+                    "personaId": "somchai",
+                    "question": "Hi Somchai, there are some suspicious numbers calling you.",
+                    "audioVoice": "onyx",
+                },
+            )
+        finally:
+            main.request_openai_gpt_audio = original
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["audioVoice"], "onyx")
+        self.assertEqual(data["audioData"], "UklGRg==")
+
+    def test_voice_turn_can_process_captured_audio_with_gpt_audio(self):
+        import fastapi_service.main as main
+
+        def fake_audio(messages, persona_id, purpose, max_tokens=220):
+            self.assertEqual(purpose, "turn")
+            self.assertEqual(persona_id, "malee")
+            self.assertIsInstance(messages[-1]["content"], list)
+            return {
+                "text": "Thanks, Malee. Check the blue pill box first.",
+                "audioData": "UklGRg==",
+                "audioFormat": "wav",
+            }
+
+        original = main.request_openai_gpt_audio
+        main.request_openai_gpt_audio = fake_audio
+        try:
+            response = self.client.post(
+                "/v1/voice/turn",
+                json={
+                    "personaId": "malee",
+                    "question": "Hi Malee, Did I already take the morning medicine yet?",
+                    "transcript": "captured audio",
+                    "audioData": "UklGRg==",
+                    "audioFormat": "wav",
+                    "audioVoice": "shimmer",
+                },
+            )
+        finally:
+            main.request_openai_gpt_audio = original
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["source"], "openai-gpt-audio")
+        self.assertEqual(data["audioData"], "UklGRg==")
+        self.assertEqual(data["audioVoice"], "shimmer")
+
     def test_api_voice_turn_accepts_frontend_contract(self):
         response = self.client.post(
             "/api/voice-turn",

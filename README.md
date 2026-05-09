@@ -46,7 +46,8 @@ FastAPI routes:
 - `GET /api/workspace` and `POST /api/workspace` expose the care workspace.
 - `GET /docs` opens the FastAPI API reference.
 - `POST /v1/realtime/session` creates a short-lived OpenAI Realtime client secret for browser voice sessions.
-- `POST /v1/voice/turn` and `/api/voice-turn` process one spoken answer and return one persona-specific spoken reply.
+- `POST /v1/voice/prompt` and `/api/voice-prompt` create the first natural AGI question using a stable persona voice.
+- `POST /v1/voice/turn` and `/api/voice-turn` process one captured spoken answer and return one persona-specific GPT-audio spoken reply.
 
 Optional environment variables:
 
@@ -56,13 +57,14 @@ SECOND_BRAIN_API_TOKEN=<server-side-bearer-token>
 BACKEND_BEARER_TOKEN=<same-service-bearer-token>
 SECOND_BRAIN_MODEL=gpt-5.5-pro
 OPENAI_API_KEY=<server-side-key-for-realtime-voice>
+OPENAI_AUDIO_MODEL=gpt-audio
 COMPANION_API_TOKEN=<optional-local-session-token>
 OPENAI_REALTIME_MODEL=gpt-realtime
 CORS_ALLOW_ORIGIN=https://your-domain.example
 WORKSPACE_JSON_PATH=/path/to/workspace.json
 ```
 
-The browser never receives a standard API key. For realtime voice sessions, call `/api/realtime-session` from the product server or `/v1/realtime/session` from a trusted backend with the service bearer token; the response returns only a short-lived Realtime client secret. For the one-turn help flow, the browser calls `/api/voice-turn`; the product server forwards the transcript to `/v1/voice/turn` with the service bearer token. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred model is `gpt-5.5-pro`.
+The browser never receives a standard API key. For realtime voice sessions, call `/api/realtime-session` from the product server or `/v1/realtime/session` from a trusted backend with the service bearer token; the response returns only a short-lived Realtime client secret. For the one-turn help flow, the browser calls `/api/voice-prompt` for the first spoken question, captures one microphone answer as WAV audio, then calls `/api/voice-turn`; the product server forwards the audio to `/v1/voice/turn` with the service bearer token. GPT-audio uses stable persona voices: Malee = `shimmer`, Somchai = `onyx`, Araya = `nova`. If service access is unavailable, the endpoint returns protected guidance using the same response contract so the care flow can continue safely. The preferred text model is `gpt-5.5-pro`; the preferred one-turn audio model is `gpt-audio`.
 
 ## Care workspace
 
